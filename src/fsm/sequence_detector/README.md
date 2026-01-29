@@ -63,9 +63,10 @@ This pattern allows:
 ---
 
 ## Verification
-All four FSM variants are verified using a **common testbench** that applies
+-All four FSM variants are verified using a **common testbench** that applies
 identical input sequences, clocking, and reset conditions. This enables
-direct behavioral comparison between implementations.
+direct behavioral comparison between implementations. 
+-A self-checking Verilog testbench is used that automatically reports PASS/FAIL by comparing DUT output against an internal reference model. No manual waveform inspection is required.
 
 ---
 
