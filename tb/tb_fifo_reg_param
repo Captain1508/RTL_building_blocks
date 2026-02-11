@@ -1,1 +1,152 @@
-xx
+`timescale 1ns/1ps
+
+module tb_fifo;
+    parameter WIDTH = 8;
+    parameter DEPTH = 4;
+    reg                  clk;
+    reg                  rst;
+    reg                  wr_en;
+    reg                  rd_en;
+    reg  [WIDTH-1:0]     din;
+    wire [WIDTH-1:0]     dout;
+    wire                 full;
+    wire                 empty;
+    
+    fifo_param #(
+        .WIDTH(WIDTH),
+        .DEPTH(DEPTH)
+    ) dut (
+        .clk   (clk),
+        .rst   (rst),
+        .wr_en (wr_en),
+        .rd_en (rd_en),
+        .din   (din),
+        .dout  (dout),
+        .full  (full),
+        .empty (empty)
+    );
+
+   
+    initial clk = 0;
+    always #5 clk = ~clk;
+
+   
+    reg [WIDTH-1:0] ref_mem [0:DEPTH-1];
+    integer ref_wr_ptr;
+    integer ref_rd_ptr;
+    integer ref_count;
+
+  
+    task ref_reset;
+    begin
+        ref_wr_ptr = 0;
+        ref_rd_ptr = 0;
+        ref_count  = 0;
+    end
+    endtask
+    
+    task apply_reset;
+    begin
+        rst = 1;
+        wr_en = 0;
+        rd_en = 0;
+        din   = 0;
+        @(posedge clk);
+        rst = 0;
+    end
+    endtask
+
+    task fifo_write(input [WIDTH-1:0] data);
+    begin
+        wr_en = 1;
+        rd_en = 0;
+        din   = data;
+        @(posedge clk);
+        wr_en = 0;
+    end
+    endtask
+
+    task fifo_read;
+    begin
+        wr_en = 0;
+        rd_en = 1;
+        @(posedge clk);
+        rd_en = 0;
+    end
+    endtask
+
+    always @(posedge clk) begin
+        if (rst) begin
+            ref_reset();
+        end else begin
+            // WRITE
+            if (wr_en && !full) begin
+                ref_mem[ref_wr_ptr] = din;
+                ref_wr_ptr = (ref_wr_ptr + 1) % DEPTH;
+                ref_count = ref_count + 1;
+            end
+
+            // READ
+            if (rd_en && !empty) begin
+                ref_rd_ptr = (ref_rd_ptr + 1) % DEPTH;
+                ref_count = ref_count - 1;
+            end
+        end
+    end
+
+
+    always @(posedge clk) begin
+        if (rd_en && !empty) begin
+            if (dout !== ref_mem[ref_rd_ptr]) begin
+                $display("? DATA MISMATCH at time %0t", $time);
+                $display("Expected = %0h, Got = %0h",
+                         ref_mem[ref_rd_ptr], dout);
+                $fatal;
+            end
+        end
+    end
+
+    always @(posedge clk) begin
+        if (full !== (ref_count == DEPTH)) begin
+            $display("? FULL FLAG ERROR at time %0t", $time);
+            $fatal;
+        end
+
+        if (empty !== (ref_count == 0)) begin
+            $display("? EMPTY FLAG ERROR at time %0t", $time);
+            $fatal;
+        end
+    end
+
+    integer i;
+
+    initial begin
+       
+        rst = 0;
+        wr_en = 0;
+        rd_en = 0;
+        din   = 0;
+
+        apply_reset();
+
+        for (i = 0; i < DEPTH; i = i + 1) begin
+            fifo_write(i);
+        end
+
+        for (i = 0; i < DEPTH; i = i + 1) begin
+            fifo_read();
+        end
+
+        fifo_write(8'hAA);
+        wr_en = 1;
+        rd_en = 1;
+        din   = 8'h55;
+        @(posedge clk);
+        wr_en = 0;
+        rd_en = 0;
+
+        $display("? ALL FIFO TESTS PASSED");
+        $finish;
+    end
+
+endmodule
